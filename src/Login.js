@@ -43,12 +43,20 @@ const Login = () => {
       Alert.alert('Error', 'Please fill in all fields.');
       return;
     }
-
+  
     try {
       setLoading(true);
       const response = await axios.post(`${API_BASE_URL}/auth/login`, { login, password });
-      const { token } = response.data;
+      
+      const { token, role, userId, branch } = response.data;
+      
+      // Save details in AsyncStorage
       await AsyncStorage.setItem('userToken', token);
+      await AsyncStorage.setItem('role', role);
+      await AsyncStorage.setItem('userId', userId.toString()); // Ensure it's saved as a string
+      await AsyncStorage.setItem('branch', branch.toString()); // Save branch as a string
+  
+      // Navigate to the Fuel Sales Management screen
       navigation.navigate('FuelSalesManagement');
     } catch (error) {
       if (error.response) {
@@ -62,7 +70,7 @@ const Login = () => {
       setLoading(false);
     }
   };
-
+  
   const translateY = animatedValue.interpolate({
     inputRange: [0, 1],
     outputRange: [50, 0],

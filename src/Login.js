@@ -1,24 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
   Alert,
-  Animated,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Keyboard,
+  TouchableWithoutFeedback,
+  ActivityIndicator,
+  SafeAreaView,
+  StatusBar
 } from 'react-native';
-import { Button } from 'react-native-elements';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const API_BASE_URL = 'http://10.110.7.226:5000/api';
 
 const Login = () => {
@@ -26,173 +29,246 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const navigation = useNavigation();
 
-  const animatedValue = new Animated.Value(0);
-
-  useEffect(() => {
-    Animated.timing(animatedValue, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
-  }, []);
+  // Reset form state when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      setLogin('');
+      setPassword('');
+      setLoading(false);
+      return () => {};
+    }, [])
+  );
 
   const handleLogin = async () => {
-    if (!login || !password) {
-      Alert.alert('Error', 'Please fill in all fields.');
+    if (!login.trim() || !password.trim()) {
+      Alert.alert('Missing Information', 'Please fill in all fields.');
       return;
     }
-  
+
+    Keyboard.dismiss();
+    setLoading(true);
+
     try {
-      setLoading(true);
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, { login, password });
-      
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+        login: login.trim(),
+        password: password.trim()
+      });
+
       const { token, role, userId, branch } = response.data;
-      
-      // Save details in AsyncStorage
-      await AsyncStorage.setItem('userToken', token);
-      await AsyncStorage.setItem('role', role);
-      await AsyncStorage.setItem('userId', userId.toString()); // Ensure it's saved as a string
-      await AsyncStorage.setItem('branch', branch.toString()); // Save branch as a string
-  
-      // Navigate to the Fuel Sales Management screen
-      navigation.navigate('FuelSalesManagement');
+
+      // Save user data
+      await Promise.all([
+        AsyncStorage.setItem('userToken', token),
+        AsyncStorage.setItem('role', role),
+        AsyncStorage.setItem('userId', userId.toString()),
+        AsyncStorage.setItem('branch', branch.toString())
+      ]);
+
+      navigation.replace('FuelSalesManagement');
     } catch (error) {
+      let message = 'An unexpected error occurred';
+      
       if (error.response) {
-        Alert.alert('Login Failed', error.response.data.message || 'Invalid username/email or password.');
+        message = error.response.data.message || 'Invalid credentials';
       } else if (error.request) {
-        Alert.alert('Network Error', 'Unable to reach the server. Please check your network connection.');
-      } else {
-        Alert.alert('Error', 'Something went wrong.');
+        message = 'Network error. Please check your connection';
       }
+      
+      Alert.alert('Login Failed', message);
     } finally {
       setLoading(false);
     }
   };
-  
-  const translateY = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [50, 0],
-  });
 
-  const opacity = animatedValue;
+  const dismissKeyboard = () => {
+    Keyboard.dismiss();
+  };
 
   return (
-    <LinearGradient
-      colors={['#007547', '#007547', '#192f6a']}
-      style={styles.container}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoidingView}
-      >
-        <Animated.View style={[styles.formContainer, { opacity, transform: [{ translateY }] }]}>
-          <Text style={styles.title}>Welcome Back</Text>
-          <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={24} color="#fff" style={styles.icon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Username or Email"
-              placeholderTextColor="#ccc"
-              value={login}
-              onChangeText={setLogin}
-            />
-          </View>
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={24} color="#fff" style={styles.icon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#ccc"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-              <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <Button
-            title="Login"
-            onPress={handleLogin}
-            loading={loading}
-            buttonStyle={styles.loginButton}
-            titleStyle={styles.buttonText}
-            containerStyle={styles.buttonContainer}
-          />
-          <TouchableOpacity>
-            <Text style={styles.forgotPassword}>Forgot Password?</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </LinearGradient>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#007547" />
+      <TouchableWithoutFeedback onPress={dismissKeyboard}>
+        <View style={styles.container}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidView}
+          >
+            <View style={styles.formContainer}>
+              <View style={styles.headerContainer}>
+                <Text style={styles.welcomeText}>Welcome Back</Text>
+                <Text style={styles.subtitleText}>Sign in to continue</Text>
+              </View>
+
+              <View style={styles.inputsContainer}>
+                <View style={styles.inputWrapper}>
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="person-outline" size={24} color="#666" />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Username or Email"
+                      placeholderTextColor="#666"
+                      value={login}
+                      onChangeText={setLogin}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      returnKeyType="next"
+                      editable={!loading}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputWrapper}>
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="lock-closed-outline" size={24} color="#666" />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Password"
+                      placeholderTextColor="#666"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      returnKeyType="done"
+                      onSubmitEditing={handleLogin}
+                      editable={!loading}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeIcon}
+                    >
+                      <Ionicons
+                        name={showPassword ? "eye-outline" : "eye-off-outline"}
+                        size={24}
+                        color="#666"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.loginButtonText}>Sign In</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.forgotPasswordContainer}
+                onPress={() => Alert.alert('Password Reset', 'Please contact your administrator to reset your password.')}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </TouchableWithoutFeedback>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#007547',
+  },
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#007547',
   },
-  keyboardAvoidingView: {
+  keyboardAvoidView: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    width: '100%',
+    padding: 20,
   },
   formContainer: {
     width: width * 0.9,
-    padding: 20,
+    maxWidth: 400,
+    backgroundColor: '#ffffff',
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    alignItems: 'center',
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
+  headerContainer: {
+    alignItems: 'center',
     marginBottom: 30,
-    textAlign: 'center',
+  },
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#007547',
+    marginBottom: 8,
+  },
+  subtitleText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  inputsContainer: {
+    marginBottom: 20,
+  },
+  inputWrapper: {
+    marginBottom: 15,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#fff',
-  },
-  icon: {
-    marginRight: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   input: {
     flex: 1,
-    color: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    color: '#333',
     fontSize: 16,
-    paddingVertical: 10,
   },
   eyeIcon: {
-    padding: 10,
+    padding: 8,
   },
   loginButton: {
-    backgroundColor: '#00a86b',
-    borderRadius: 25,
+    backgroundColor: '#007547',
+    borderRadius: 12,
     paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
   },
-  buttonContainer: {
-    width: '100%',
-    marginVertical: 10,
+  loginButtonDisabled: {
+    backgroundColor: '#007547aa',
   },
-  buttonText: {
+  loginButtonText: {
+    color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },
-  forgotPassword: {
-    color: '#fff',
-    marginTop: 15,
-    textDecorationLine: 'underline',
+  forgotPasswordContainer: {
+    alignItems: 'center',
+    marginTop: 20,
   },
+  forgotPasswordText: {
+    color: '#007547',
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  }
 });
 
 export default Login;
